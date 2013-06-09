@@ -78,13 +78,12 @@ module GitStalker
     end
     attr_reader :working_root_dir
     def for(repo)
-      WorkingRepository.new(working_root_dir, repo)
+      WorkingRepository.new(working_root_dir, repo.name, repo.url)
     end
   end
 
   class WorkingRepository
     def initialize(working_root_dir, name, url)
-      @logical_repository = repo
       @working_dir = File.join(working_root_dir, name)
       @repo_url = url
     end
@@ -142,8 +141,8 @@ module GitStalker
     end
 
     def branches
-      working_repo.remotes.map{|raw|
-        Branch.new(self, raw.name)
+      working_repo.raw.remotes.reject{|raw| raw.name == 'origin/HEAD'}.map{|raw|
+        Branch.new(self, raw.name.gsub(/^origin\//, ''))
       }
     end
 
@@ -160,7 +159,7 @@ module GitStalker
     private
       def raw_branch(name)
         fullname = "origin/#{name}"
-        working_repo.remotes.detect{|ref| ref.name == fullname }
+        working_repo.raw.remotes.detect{|ref| ref.name == fullname }
       end
   end
 
@@ -201,12 +200,50 @@ module GitStalker
 
   class Commit
     def initialize(repository, raw_commit)
+      @raw = raw_commit
     end
+    attr_reader :raw
+
     def changed_files
+      @raw.diffs.map{|d| ChangedFile.new(self, d) }
     end
   end
 
   class ChangedFile
+    def initialize(commit, raw_diff)
+      parsed = parse_diff(raw_diff.diff)
+      @added_lines = parsed[:added_lines]
+      @deleted_lines = parsed[:deleted_lines]
+      @prev_path = raw_diff.a_path
+      @path = raw_diff.b_path
+    end
+
+    attr_reader :prev_path
+    attr_reader :path
+    attr_reader :added_lines
+    attr_reader :deleted_lines
+
+    private
+      # raw_diff_str -> { :added_lines|:deleted_lines => [line] }
+      def parse_diff(str)
+        added = []
+        deleted = []
+        lines = str.split(/\n/)
+        lines.each do|line|
+          case line
+          when /^\+ /
+            added << line.sub(/^\+ /, '')
+          when /^- /
+            deleted << line.sub(/^- /, '')
+          else
+            # nothing
+          end
+        end
+        {
+          added_lines: added,
+          deleted_lines: deleted,
+        }
+      end
   end
 
   class Rules
@@ -236,14 +273,43 @@ module GitStalker
     def extract_commit_events(commit)
       []
     end
-    class LineAdded < self
-      def initialize(pat)
-        @pat = pat
-      end
+    class RubyMethod < self
       def extract_commit_events(commit)
-        comit.ch
+        events = []
+        commit.changed_files.each do|cf|
+          added = defined_method_names(cf.added_lines)
+          deleted = defined_method_names(cf.deleted_lines)
+          changed = added & deleted
+          just_deleted = deleted - added
+          just_added = added - deleted
+          unless [changed, just_deleted, just_added].all?(&:empty?)
+            events << CommitEvent.new('ruby.method', commit, {
+              path: cf.path,
+              added: just_added,
+              deleted: just_deleted,
+              changed: changed,
+            })
+          end
+        end
+        events
       end
+      private
+        def defined_method_names(lines)
+          defmethod_pat = /^\s*def\s+(([a-zA-Z0-9_!?]+\.)?[a-zA-Z0-9_!?]+)/
+          lines.select{|l| l =~ defmethod_pat}.map{|l| defmethod_pat.match(l)[1]}.uniq
+        end
     end
+  end
+
+  class CommitEvent
+    def initialize(type, commit, data)
+      @type = type
+      @commit = commit
+      @data = data
+    end
+    attr_reader :type
+    attr_reader :commit
+    attr_reader :data
   end
 
   class RepositoryPattern
