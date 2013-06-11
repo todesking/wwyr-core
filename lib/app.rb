@@ -1,3 +1,6 @@
+class NotImplemented < StandardError; end
+def nimpl; raise NotImplemented; end
+
 module GitStalker
   class App
     def initialize(config)
@@ -124,16 +127,17 @@ module GitStalker
       RepositoryState.new(
         self,
         branches.each_with_object({}) do|branch, h|
-          h[branch] = Commit.new(self, branch.head)
+          h[branch] = branch.head
         end
       )
     end
 
     def changed_branches(prev_state)
-      head_changed = current_state.filter {|branch, commit|
+      head_changed = current_state.select {|branch, commit|
         prev_state.head_of(branch) != commit
       }.map{|b, c| b}
-      removed = prev_state.filter{|branch, commit|
+
+      removed = prev_state.select {|branch, commit|
         current_state.has_branch?(branch)
       }.map{|b, c| b}
 
@@ -146,6 +150,15 @@ module GitStalker
       }
     end
 
+    def branch(name)
+      branches.find{|b| b.name == name} || (raise "Branch not found: #{name}")
+    end
+
+    # String -> Commit
+    def commit(id)
+      Commit.new(self, id)
+    end
+
     def branch_exists?(name)
       !!raw_branch(name)
     end
@@ -153,7 +166,17 @@ module GitStalker
     def branch_head_of(name)
       raw_b = raw_branch(name)
       raise "Branch not exists: #{name}" unless raw_b
-      Commit.new(self, raw_b.commit)
+      Commit.new(self, raw_b.commit.id)
+    end
+
+    def changed_files_in_commit(id)
+      working_repo.raw.commit(id).diffs.map{|d| ChangedFile.new(self, d) }
+    end
+
+    def commits_between(from_id, to_id)
+      working_repo.raw.commits_between(from_id, to_id).map {|c|
+        commit(c.id)
+      }
     end
 
     private
@@ -169,7 +192,14 @@ module GitStalker
     end
     attr_reader :repo
     attr_reader :name
+
+    # Commit|nil -> [Commit ...]|[]
     def new_commits_since(commit)
+      if commit
+        @repo.commits_between(commit.id, head.id)
+      else
+        []
+      end
     end
     def exists?
       repo.branch_exists?(self.name)
@@ -177,11 +207,25 @@ module GitStalker
     def head
       repo.branch_head_of(self.name)
     end
+
+    def ==(other)
+      other.is_a?(Branch) && self.poro == other.poro
+    end
+
+    alias eql? ==
+
+    def hash
+      poro.hash
+    end
+
+    def poro
+      [@repo.name, @name]
+    end
   end
 
   class RepositoryState
     include Enumerable
-    # &(Branch -> Commit ->) ->
+    # &([Branch ,Commit] ->) ->
     def each(&block)
       @heads.each(&block)
     end
@@ -194,18 +238,23 @@ module GitStalker
 
     # Branch -> Commit|nil
     def head_of(branch)
-      heads[branch]
+      @heads[branch]
+    end
+
+    def has_branch?(branch)
+      !!@heads[branch]
     end
   end
 
   class Commit
-    def initialize(repository, raw_commit)
-      @raw = raw_commit
+    def initialize(repository, id)
+      @repo = repository
+      @id = id
     end
-    attr_reader :raw
+    attr_reader :id
 
     def changed_files
-      @raw.diffs.map{|d| ChangedFile.new(self, d) }
+      @repo.changed_files_in_commit(id)
     end
   end
 
@@ -254,24 +303,28 @@ module GitStalker
       @commit_rules = {}
     end
     def add_branch_rule(repo_pat, rule)
+      nimpl
     end
     def add_commit_rule(repo_pat, branch_pat, rule)
+      nimpl
     end
     def branch_rules_for(repo)
+      nimpl
     end
     def commit_rules_for(branch)
+      nimpl
     end
   end
 
   class BranchRule
     def extract_branch_events(branch, prev_head)
-      []
+      nimpl
     end
   end
 
   class CommitRule
     def extract_commit_events(commit)
-      []
+      nimpl
     end
     class RubyMethod < self
       def extract_commit_events(commit)
@@ -314,6 +367,7 @@ module GitStalker
 
   class RepositoryPattern
     def match?(repo)
+      nimpl
     end
 
     def self.all
@@ -327,6 +381,7 @@ module GitStalker
   end
   class BranchPattern
     def match?(branch)
+      nimpl
     end
 
     def self.name_exact(*names)
@@ -344,7 +399,14 @@ module GitStalker
 
   class State
     def load_repo_state(repo)
-      nil
+      case repo.name
+      when 'mysql2'
+        RepositoryState.new(repo, {
+          Branch.new(repo, 'master') => repo.commit('e9d96941a4c962b940b47022bbfe77bcc37b652e')
+        })
+      else
+        RepositoryState.new(repo, {})
+      end
     end
   end
 end
