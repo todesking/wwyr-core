@@ -1,0 +1,40 @@
+GIT
+  remote: https://github.com/todesking/typedocs.git
+  revision: fd09cab0e321557a91324c4414f114537d381645
+  specs:
+    typedocs (0.0.1)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    coderay (1.0.9)
+    diff-lcs (1.2.4)
+    grit (2.5.0)
+      diff-lcs (~> 1.1)
+      mime-types (~> 1.15)
+      posix-spawn (~> 0.3.6)
+    method_source (0.8.1)
+    mime-types (1.23)
+    posix-spawn (0.3.6)
+    pry (0.9.12.1)
+      coderay (~> 1.0.5)
+      method_source (~> 0.8)
+      slop (~> 3.4)
+    rspec (2.13.0)
+      rspec-core (~> 2.13.0)
+      rspec-expectations (~> 2.13.0)
+      rspec-mocks (~> 2.13.0)
+    rspec-core (2.13.1)
+    rspec-expectations (2.13.0)
+      diff-lcs (>= 1.1.3, < 2.0)
+    rspec-mocks (2.13.1)
+    slop (3.4.4)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  grit
+  pry
+  rspec
+  typedocs!
