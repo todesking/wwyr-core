@@ -7,8 +7,7 @@ describe "At first, there is a repository" do
   let(:repo_a) { new_git_repository }
   let(:config_yaml) { <<-EOS }
 repositories:
-  -
-    name: test
+  test:
     url: #{repo_a.path}
   EOS
   let(:config) { ns::Config.new(YAML.load(config_yaml), working_dir) }

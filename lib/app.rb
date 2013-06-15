@@ -3,6 +3,7 @@ def nimpl; raise NotImplemented; end
 
 require 'yaml'
 require 'grit'
+require 'typedocs/fallback'
 
 module GitStalker
   class App
@@ -37,6 +38,9 @@ module GitStalker
   end
 
   class Config
+    include Typedocs::DSL
+
+    tdoc "Hash -> String ->"
     def initialize(config_hash, working_dir)
       @config = config_hash.dup.freeze
       @working_repos = WorkingRepositories.new(working_dir)
@@ -45,8 +49,8 @@ module GitStalker
     attr_reader :working_repos
 
     def repositories
-      @config['repositories'].map {|name, url|
-        Repository.new(name, url).tap do|r|
+      @config['repositories'].map {|name, attr|
+        Repository.new(name, attr['url']).tap do|r|
           r.working_repo = working_repos.for(r)
         end
       }
@@ -81,6 +85,9 @@ module GitStalker
   end
 
   class WorkingRepository
+    include Typedocs::DSL
+
+    tdoc "working_root_dir:String|File -> name:String -> url:String ->"
     def initialize(working_root_dir, name, url)
       @working_dir = File.join(working_root_dir, name)
       @repo_url = url
