@@ -1,6 +1,9 @@
 class NotImplemented < StandardError; end
 def nimpl; raise NotImplemented; end
 
+require 'yaml'
+require 'grit'
+
 module GitStalker
   class App
     def initialize(config)
@@ -9,55 +12,40 @@ module GitStalker
 
     attr_reader :config
 
-    def events
-      app_state = State.new
-      rules = config.rules
-
-      config.repositories.map {|repo|
-        prev_state = app_state.load_repo_state(repo)
-        next [] unless prev_state
-        extract_all_events(repo, prev_state)
+    def extract_all_events(repo, prev_state)
+      repo.changed_branches(prev_state).map {|branch|
+        prev_head = prev_state.head_of(branch)
+        [
+          extract_branch_events(branch, prev_head),
+          extract_commit_events(branch, prev_head),
+        ]
+      }.flatten(2)
+    end
+    def extract_branch_events(brahch, prev_head)
+      config.branch_rules_for(branch.repo).map {|rule|
+        rule.extract_branch_events(branch, prev_head)
       }.flatten(1)
+    end
+    def extract_commit_events(branch, prev_head)
+      commit_rules = config.rules.commit_rules_for(branch)
+      branch.new_commits_since(prev_head).map {|commit|
+        commit_rules.map {|rule|
+          rule.extract_commit_events(commit)
+        }
+      }.flatten(2)
     end
   end
 
-  def extract_all_events(repo, prev_state)
-    repo.changed_branches(prev_state).map {|branch|
-      prev_head = prev_state.head_of(branch)
-      [
-        extract_branch_events(branch, prev_head),
-        extract_commit_events(branch, prev_head),
-      ]
-    }.flatten(2)
-  end
-  def extract_branch_events(brahch, prev_head)
-    config.branch_rules_for(branch.repo).map {|rule|
-      rule.extract_branch_events(branch, prev_head)
-    }.flatten(1)
-  end
-
-  def extract_commit_events(branch, prev_head)
-    commit_rules = config.rules.commit_rules_for(branch)
-    branch.new_commits_since(prev_head).map {|commit|
-      commit_rules.map {|rule|
-        rule.extract_commit_events(commit)
-      }
-    }.flatten(2)
-  end
-
   class Config
-    def initialize(working_dir)
+    def initialize(config_hash, working_dir)
+      @config = config_hash.dup.freeze
       @working_repos = WorkingRepositories.new(working_dir)
     end
     attr_reader :rules
     attr_reader :working_repos
 
     def repositories
-      repos = {
-        'mysql2' => 'https://github.com/brianmario/mysql2.git',
-      }
-
-      repos.map {|name, url|
+      @config['repositories'].map {|name, url|
         Repository.new(name, url).tap do|r|
           r.working_repo = working_repos.for(r)
         end
@@ -66,11 +54,18 @@ module GitStalker
 
     def rules
       Rules.new.tap do|rules|
-        rules.add_commit_rule(
-          RepositoryPattern.all,
-          BranchPattern.name_exact('master'),
-          CommitRule::LineAdded.new(/def close/)
-        )
+        @config['rules']['commit'].each do|c|
+          type, config =
+            case c
+            when String then [c, {}]
+            else [c['type'], c]
+            end
+          rules.add_commit_rule(
+            RepositoryPattern.all,
+            BranchPattern.all,
+            CommitRule.const_get(type, false).new(c)
+          )
+        end
       end
     end
   end
@@ -297,22 +292,24 @@ module GitStalker
 
   class Rules
     def initialize
-      # {RepositoryPattern => BranchRule}
-      @branch_rules = {}
-      # {BranchPattern => CommitRule}
-      @commit_rules = {}
+      # [[RepositoryPattern, BranchRule]...]
+      @branch_rules = []
+      # [[[RepositoryPattern, BranchPattern], CommitRule]...]
+      @commit_rules = []
     end
     def add_branch_rule(repo_pat, rule)
       nimpl
     end
     def add_commit_rule(repo_pat, branch_pat, rule)
-      nimpl
+      @commit_rules << [[repo_pat, branch_pat], rule]
     end
     def branch_rules_for(repo)
       nimpl
     end
     def commit_rules_for(branch)
-      nimpl
+      @commit_rules.select{|(repo_pat, branch_pat),rule|
+        repo_pat.match?(branch.repo) && branch_pat.match?(branch)
+      }.map{|(rp,bp),r| r}
     end
   end
 
@@ -323,27 +320,30 @@ module GitStalker
   end
 
   class CommitRule
+    def initialize(config)
+    end
     def extract_commit_events(commit)
       nimpl
     end
     class RubyMethod < self
       def extract_commit_events(commit)
         events = []
-        commit.changed_files.each do|cf|
-          added = defined_method_names(cf.added_lines)
-          deleted = defined_method_names(cf.deleted_lines)
-          changed = added & deleted
-          just_deleted = deleted - added
-          just_added = added - deleted
-          unless [changed, just_deleted, just_added].all?(&:empty?)
-            events << CommitEvent.new('ruby.method', commit, {
-              path: cf.path,
-              added: just_added,
-              deleted: just_deleted,
-              changed: changed,
-            })
+        commit.changed_files.
+          filter{|cf| cf.path =~ /\.rb$/}.each do|cf|
+            added = defined_method_names(cf.added_lines)
+            deleted = defined_method_names(cf.deleted_lines)
+            changed = added & deleted
+            just_deleted = deleted - added
+            just_added = added - deleted
+            unless [changed, just_deleted, just_added].all?(&:empty?)
+              events << CommitEvent.new('ruby.method', commit, {
+                path: cf.path,
+                added: just_added,
+                deleted: just_deleted,
+                changed: changed,
+              })
+            end
           end
-        end
         events
       end
       private
@@ -386,6 +386,14 @@ module GitStalker
 
     def self.name_exact(*names)
       Exact.new(names)
+    end
+    def self.all
+      All.new
+    end
+    class All < self
+      def match?(branch)
+        true
+      end
     end
     class Exact < self
       def initialize(names)
