@@ -2,7 +2,7 @@ require 'spec_helper'
 
 describe "At first, there is a repository" do
   after(:all) { SpecHelper.cleanup }
-  let(:ns) { GitStalker }
+  let(:ns) { WWYR }
   let(:working_dir) { new_tmp_dir }
   let(:repo_a) { new_git_repository }
   let(:config_yaml) { <<-EOS }

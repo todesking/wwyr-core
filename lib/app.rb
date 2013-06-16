@@ -5,7 +5,7 @@ require 'yaml'
 require 'grit'
 require 'typedocs/fallback'
 
-module GitStalker
+module WWYR
 
   class App
     def initialize(config)
