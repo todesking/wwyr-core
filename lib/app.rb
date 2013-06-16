@@ -300,14 +300,21 @@ module GitStalker
         added = []
         deleted = []
         lines = str.split(/\n/)
+        state = :end
         lines.each do|line|
           case line
-          when /^\+ /
-            added << line.sub(/^\+ /, '')
-          when /^- /
-            deleted << line.sub(/^- /, '')
+          when /^--- /, /^\+\+\+ / # path
+            next
+          when /^@@/ # range
+            next
+          when /^ / # unchanged line
+            next
+          when /^\+/
+            added << line.sub(/^\+/, '')
+          when /^-/
+            deleted << line.sub(/^-/, '')
           else
-            # nothing
+            raise "Unknown diff format: #{line}"
           end
         end
         {

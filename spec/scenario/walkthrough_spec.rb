@@ -39,7 +39,7 @@ repositories:
         it('head is unavailable') { expect { subject.head }.to raise_error }
       end
     end
-    context 'some commits' do
+    context 'with some commits' do
       before(:each) do
         repo_a.new_file 'readme', 'this is readme'
         repo_a.git *%(add readme)
@@ -65,10 +65,14 @@ repositories:
             describe 'file: readme' do
               subject { changed_files.detect{|cf| cf.path == 'readme' } }
               it { should_not be_new_file }
+              its(:added_lines) { should == ['READ!! ME!!'] }
+              its(:deleted_lines) { should == ['this is readme'] }
             end
             describe 'file: license' do
               subject { changed_files.detect{|cf| cf.path == 'license' } }
               it { should be_new_file }
+              its(:added_lines) { should == ['DO WHAT THE FUCK YOU WANT'] }
+              its(:deleted_lines) { should be_empty }
             end
           end
         end
