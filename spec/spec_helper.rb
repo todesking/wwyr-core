@@ -32,34 +32,48 @@ module SpecHelper
   end
 
   class GitRepo
-    def initialize
-      @root = Dir.mktmpdir
-      ::SpecHelper.register_cleanup_hook do
-        self.close
-      end
-    end
-
-    def close
-      FileUtils.remove_entry_secure(@root)
+    def initialize(dir)
+      @root = dir
     end
 
     def path
       @root
     end
 
+    def new_file(name, content)
+      path = File.join(@root, name)
+      raise "File already exists: #{name}" if File.exists?(path)
+
+      File.open(path, 'w') do|f|
+        f.write content
+      end
+    end
+
+    def modify_file(name, content)
+      path = File.join(@root, name)
+      raise "File not exists: #{name}" unless File.exists?(path)
+
+      File.open(path, 'w') do|f|
+        f.write content
+      end
+    end
+
+    def git(*args)
+      exec(:git, *args)
+    end
+
     def exec(*args)
+      out_command_log = ENV['OUT_COMMAND_LOG'].to_i > 0
       Dir.chdir(@root) do
         command = args.map(&:to_s)
-        success = `#{command.join(' ')}`
-        raise "Exit status is nonzero(#{$?}) while executing: #{command.join(' ')}" unless success
+        puts "EXECUTING: #{command*' '}" if out_command_log
+        out = `#{command.join(' ')}`
+        puts out if out_command_log
+        raise "Exit status is nonzero(#{$?}) while executing: #{command.join(' ')}\nOUTPUT: #{out}" unless $?.exitstatus == 0
       end
     end
 
   end
-end
-
-def new_git_repository
-  SpecHelper::GitRepo.new
 end
 
 def new_tmp_dir
@@ -67,3 +81,8 @@ def new_tmp_dir
   SpecHelper.register_cleanup_hook { FileUtils.remove_entry_secure(tmpdir) }
   tmpdir
 end
+
+def new_git_repository
+  SpecHelper::GitRepo.new(new_tmp_dir)
+end
+

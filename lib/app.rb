@@ -6,6 +6,7 @@ require 'grit'
 require 'typedocs/fallback'
 
 module GitStalker
+
   class App
     def initialize(config)
       @config = config
@@ -153,7 +154,7 @@ module GitStalker
     end
 
     def branch(name)
-      branches.find{|b| b.name == name} || (raise "Branch not found: #{name}")
+      Branch.new(self, name)
     end
 
     # String -> Commit
@@ -181,6 +182,10 @@ module GitStalker
       }
     end
 
+    def commit_message_of(id)
+      working_repo.raw.commit(id).message
+    end
+
     private
       def raw_branch(name)
         fullname = "origin/#{name}"
@@ -206,6 +211,7 @@ module GitStalker
     def exists?
       repo.branch_exists?(self.name)
     end
+
     def head
       repo.branch_head_of(self.name)
     end
@@ -255,6 +261,10 @@ module GitStalker
     end
     attr_reader :id
 
+    def message
+      @repo.commit_message_of(id)
+    end
+
     def changed_files
       @repo.changed_files_in_commit(id)
     end
@@ -265,7 +275,12 @@ module GitStalker
       parsed = parse_diff(raw_diff.diff)
       @added_lines = parsed[:added_lines]
       @deleted_lines = parsed[:deleted_lines]
-      @prev_path = raw_diff.a_path
+      @prev_path =
+        if raw_diff.a_blob
+          raw_diff.a_path
+        else
+          nil
+        end
       @path = raw_diff.b_path
     end
 
@@ -273,6 +288,11 @@ module GitStalker
     attr_reader :path
     attr_reader :added_lines
     attr_reader :deleted_lines
+
+    def new_file?
+      # FIXME: Yes, this is works only few environments, but general solution is not known.
+      !prev_path
+    end
 
     private
       # raw_diff_str -> { :added_lines|:deleted_lines => [line] }

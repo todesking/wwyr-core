@@ -24,11 +24,55 @@ repositories:
       it('should_success') {}
     end
   end
-  context 'with no commits' do
-    it { config.repositories.size.should == 1 }
-    describe 'the repository' do
-      subject { config.repositories.first }
-      its(:name) { should == 'test' }
+  describe 'config.repositories' do
+    subject { config.repositories }
+    its(:size) { should == 1 }
+  end
+  describe 'the repository' do
+    let(:repository) { config.repositories.first }
+    subject { repository }
+    its(:name) { should == 'test' }
+    context 'with no commits' do
+      describe 'master branch' do
+        subject { repository.branch('master') }
+        it { should_not be_exist }
+        it('head is unavailable') { expect { subject.head }.to raise_error }
+      end
+    end
+    context 'some commits' do
+      before(:each) do
+        repo_a.new_file 'readme', 'this is readme'
+        repo_a.git *%(add readme)
+        repo_a.git *%w(commit -m first_commit)
+
+        repo_a.modify_file 'readme', 'READ!! ME!!'
+        repo_a.new_file 'license', 'DO WHAT THE FUCK YOU WANT'
+        repo_a.git *%w(add readme license)
+        repo_a.git *%w(commit -m second_commit)
+      end
+      describe 'master branch' do
+        let(:master_branch) { repository.branch('master') }
+        subject { repository.branch('master') }
+        it { should be_exist }
+        its(:head) { should_not be_nil }
+        describe 'head commit' do
+          subject { master_branch.head }
+          its(:message) { should == 'second_commit' }
+          describe 'changed files' do
+            let(:changed_files) { master_branch.head.changed_files }
+            subject { changed_files }
+            its(:size) { should == 2 }
+            describe 'file: readme' do
+              subject { changed_files.detect{|cf| cf.path == 'readme' } }
+              it { should_not be_new_file }
+            end
+            describe 'file: license' do
+              subject { changed_files.detect{|cf| cf.path == 'license' } }
+              it { should be_new_file }
+            end
+          end
+        end
+      end
     end
   end
 end
