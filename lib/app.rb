@@ -186,6 +186,12 @@ module WWYR
       working_repo.raw.commit(id).message
     end
 
+    def recent_commits(branch_name, n)
+      working_repo.raw.commits(branch_name, n).map {|c|
+        commit(c.id)
+      }
+    end
+
     private
       def raw_branch(name)
         fullname = "origin/#{name}"
@@ -194,6 +200,7 @@ module WWYR
   end
 
   class Branch
+    include Typedocs::DSL
     def initialize(repo, name)
       @repo, @name = repo, name
     end
@@ -207,6 +214,10 @@ module WWYR
       else
         []
       end
+    end
+    tdoc "Fixnum -> [Commit...]"
+    def recent_commits(n)
+      repo.recent_commits(name, n)
     end
     def exists?
       repo.branch_exists?(self.name)

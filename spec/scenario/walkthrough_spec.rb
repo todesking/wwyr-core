@@ -76,6 +76,13 @@ repositories:
             end
           end
         end
+        describe 'recent_commits' do
+          describe 'recent 1 commits' do
+            subject { master_branch.recent_commits(1) }
+            its(:size) { should == 1 }
+            it('only contains head') { subject[0].id == master_branch.head.id }
+          end
+        end
       end
     end
   end
