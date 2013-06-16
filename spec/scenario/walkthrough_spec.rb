@@ -16,15 +16,19 @@ repositories:
     repo_a.exec :git, :init
   end
   describe 'first of first, we test the initialization process' do
-    it { 'should_success' }
-    describe 'git repo' do
+    it('should_success') {}
+    describe 'git init' do
       before(:each) do
         repo_a.exec :git, :init
       end
-      it { 'should_success' }
+      it('should_success') {}
     end
   end
   context 'with no commits' do
     it { config.repositories.size.should == 1 }
+    describe 'the repository' do
+      subject { config.repositories.first }
+      its(:name) { should == 'test' }
+    end
   end
 end
