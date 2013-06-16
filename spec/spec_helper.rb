@@ -19,10 +19,10 @@ module SpecHelper
   end
 
   def self.cleanup
-    @@cleanup_hooks.each do|hook|
+    @@cleanup_hooks.reverse.each do|hook|
       begin
         hook.call
-      rescue e
+      rescue => e
         puts "!!!!!!!!!!!! ERROR on cleanup !!!!!!!!!!!"
         puts e
         puts e.backtrace
@@ -50,7 +50,7 @@ module SpecHelper
     def exec(*args)
       Dir.chdir(@root) do
         command = args.map(&:to_s)
-        success = system(*command)
+        success = `#{command.join(' ')}`
         raise "Exit status is nonzero(#{$?}) while executing: #{command.join(' ')}" unless success
       end
     end
@@ -63,7 +63,7 @@ def new_git_repository
 end
 
 def new_tmp_dir
-  tmpdir = Dir.tmpdir
+  tmpdir = Dir.mktmpdir
   SpecHelper.register_cleanup_hook { FileUtils.remove_entry_secure(tmpdir) }
   tmpdir
 end
