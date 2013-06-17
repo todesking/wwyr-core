@@ -6,6 +6,18 @@ require 'grit'
 require 'typedocs/fallback'
 
 module WWYR
+  module Entity
+    def ==(other)
+      other.class == self.class && other.entity_id == self.entity_id
+    end
+    alias eql? ==
+    def hash
+      entity_id.hash
+    end
+    def entity_id
+      raise "should be implemented"
+    end
+  end
 
   class App
     def initialize(config)
@@ -227,17 +239,8 @@ module WWYR
       repo.branch_head_of(self.name)
     end
 
-    def ==(other)
-      other.is_a?(Branch) && self.poro == other.poro
-    end
-
-    alias eql? ==
-
-    def hash
-      poro.hash
-    end
-
-    def poro
+    include Entity
+    def entity_id
       [@repo.name, @name]
     end
   end
@@ -279,6 +282,9 @@ module WWYR
     def changed_files
       @repo.changed_files_in_commit(id)
     end
+
+    include Entity
+    alias entity_id id
   end
 
   class ChangedFile

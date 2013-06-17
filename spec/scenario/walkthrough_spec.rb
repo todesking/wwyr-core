@@ -38,8 +38,13 @@ repositories:
         it { should_not be_exist }
         it('head is unavailable') { expect { subject.head }.to raise_error }
       end
+      describe 'repository state' do
+        subject { repository.current_state }
+        it('should have no branch') { subject.to_a.size.should == 0 }
+      end
     end
     context 'with some commits' do
+      let(:master_branch) { repository.branch('master') }
       before(:each) do
         repo_a.new_file 'readme', 'this is readme'
         repo_a.git *%(add readme)
@@ -51,7 +56,6 @@ repositories:
         repo_a.git *%w(commit -m second_commit)
       end
       describe 'master branch' do
-        let(:master_branch) { repository.branch('master') }
         subject { repository.branch('master') }
         it { should be_exist }
         its(:head) { should_not be_nil }
@@ -77,11 +81,28 @@ repositories:
           end
         end
         describe 'recent_commits' do
+          describe 'recent 0 commits' do
+            subject { master_branch.recent_commits(0) }
+            its(:size) { should == 0}
+          end
           describe 'recent 1 commits' do
             subject { master_branch.recent_commits(1) }
             its(:size) { should == 1 }
             it('only contains head') { subject[0].id == master_branch.head.id }
           end
+          describe 'recent 5 commits' do
+            subject { master_branch.recent_commits(5) }
+            its(:size) { should == 2 }
+            it('only contains head') { subject[0].id == master_branch.head.id }
+          end
+        end
+      end
+      describe 'repository state' do
+        subject { repository.current_state }
+        it('should have 1 branch') { subject.to_a.size.should == 1 }
+        describe '#head_of(master branch)' do
+          subject { repository.current_state.head_of(master_branch) }
+          it('should masters head') { subject.should == master_branch.head }
         end
       end
     end
