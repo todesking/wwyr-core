@@ -1,7 +1,7 @@
 require 'spec_helper'
 
-describe "At first, there is a repository" do
-  after(:all) { SpecHelper.cleanup }
+describe "At first, there is a repository." do
+  after(:each) { SpecHelper.cleanup }
   let(:ns) { WWYR }
   let(:working_dir) { new_tmp_dir }
   let(:repo_a) { new_git_repository }
@@ -28,7 +28,7 @@ repositories:
     subject { config.repositories }
     its(:size) { should == 1 }
   end
-  describe 'the repository' do
+  describe 'The repository,' do
     let(:repository) { config.repositories.first }
     subject { repository }
     its(:name) { should == 'test' }
@@ -43,7 +43,7 @@ repositories:
         it('should have no branch') { subject.to_a.size.should == 0 }
       end
     end
-    context 'with some commits' do
+    context 'with some commits,' do
       let(:master_branch) { repository.branch('master') }
       before(:each) do
         repo_a.new_file 'readme', 'this is readme'
@@ -54,6 +54,8 @@ repositories:
         repo_a.new_file 'license', 'DO WHAT THE FUCK YOU WANT'
         repo_a.git *%w(add readme license)
         repo_a.git *%w(commit -m second_commit)
+
+        repository.update
       end
       describe 'master branch' do
         subject { repository.branch('master') }
@@ -102,7 +104,41 @@ repositories:
         it('should have 1 branch') { subject.to_a.size.should == 1 }
         describe '#head_of(master branch)' do
           subject { repository.current_state.head_of(master_branch) }
-          it('should masters head') { subject.should == master_branch.head }
+          it("should master's head") { subject.should == master_branch.head }
+        end
+      end
+      context 'and more commits,' do
+        before(:each) do
+          @prev_state = repository.current_state
+          repo_a.modify_file('license', 'GPL')
+          repo_a.git *%(add license)
+          repo_a.git *%(commit -m third_commit)
+          repository.update
+        end
+        describe 'repository state' do
+          subject { repository.current_state }
+          it("current repo_state's master != prev repo_state's master") do
+            subject.head_of(master_branch).should_not == @prev_state.head_of(master_branch)
+          end
+          describe 'head of master' do
+            subject { repository.current_state.head_of(master_branch) }
+            it { should == master_branch.head }
+          end
+        end
+        describe "master's head" do
+          subject { master_branch.head }
+          its(:message){ should == 'third_commit' }
+        end
+        describe "master's recent_commits(1)" do
+          subject { master_branch.recent_commits(1) }
+          its(:last) { should == master_branch.head }
+          itss('last.message') { should == 'third_commit' }
+        end
+        describe "master's recent_commits(100)" do
+          subject { master_branch.recent_commits(100) }
+          its(:size) { should == 3 }
+          its(:last) { should == master_branch.head }
+          itss('last.message') { should == 'third_commit' }
         end
       end
     end

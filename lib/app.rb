@@ -4,6 +4,7 @@ def nimpl; raise NotImplemented; end
 require 'yaml'
 require 'grit'
 require 'typedocs/fallback'
+require 'tsort'
 
 module WWYR
   module Entity
@@ -113,6 +114,10 @@ module WWYR
         end
     end
 
+    def update
+      raw.git.fetch
+    end
+
     def ensure_cloned
       setup_working_repo unless exists?
       nil
@@ -129,6 +134,9 @@ module WWYR
   end
 
   class Repository
+    include Typedocs::DSL
+
+    tdoc "String -> String ->"
     def initialize(name, url)
       @name, @url = name, url
     end
@@ -137,6 +145,10 @@ module WWYR
     attr_reader :url
 
     attr_accessor :working_repo
+
+    def update
+      working_repo.update
+    end
 
     def current_state
       RepositoryState.new(
@@ -169,7 +181,7 @@ module WWYR
       Branch.new(self, name)
     end
 
-    # String -> Commit
+    tdoc "String -> Commit"
     def commit(id)
       Commit.new(self, id)
     end
@@ -188,20 +200,31 @@ module WWYR
       working_repo.raw.commit(id).diffs.map{|d| ChangedFile.new(self, d) }
     end
 
+    tdoc "String -> String -> Commts"
     def commits_between(from_id, to_id)
-      working_repo.raw.commits_between(from_id, to_id).map {|c|
-        commit(c.id)
-      }
+      Commits.new(
+        working_repo.raw.commits_between(from_id, to_id).map {|c|
+          commit(c.id)
+        }
+      )
     end
 
     def commit_message_of(id)
-      working_repo.raw.commit(id).message
+      working_repo.raw.commit(id).tap{|c| break (c && c.message)}
     end
 
+    tdoc "String -> Integer -> Commits"
     def recent_commits(branch_name, n)
-      working_repo.raw.commits(branch_name, n).map {|c|
-        commit(c.id)
-      }
+      Commits.new(
+        working_repo.raw.commits("origin/#{branch_name}", n).map {|c|
+          commit(c.id)
+        }
+      )
+    end
+
+    tdoc "String -> [Commit...]"
+    def commit_parents_of(id)
+      working_repo.raw.commit(id).parents.map{|c| self.commit(c.id) }
     end
 
     private
@@ -227,7 +250,7 @@ module WWYR
         []
       end
     end
-    tdoc "Fixnum -> [Commit...]"
+    tdoc "Fixnum -> Commits"
     def recent_commits(n)
       repo.recent_commits(name, n)
     end
@@ -237,6 +260,10 @@ module WWYR
 
     def head
       repo.branch_head_of(self.name)
+    end
+
+    def inspect
+      "#<#{self.class.name} name=#{name}>"
     end
 
     include Entity
@@ -269,11 +296,19 @@ module WWYR
   end
 
   class Commit
+    include Typedocs::DSL
+
+    tdoc "Repository -> String ->"
     def initialize(repository, id)
       @repo = repository
       @id = id
     end
     attr_reader :id
+
+    tdoc "[Commit...]"
+    def parents
+      @repo.commit_parents_of(id)
+    end
 
     def message
       @repo.commit_message_of(id)
@@ -283,8 +318,51 @@ module WWYR
       @repo.changed_files_in_commit(id)
     end
 
+    def inspect
+      message =
+        if @repo.working_repo && self.message
+          " message=#{self.message}"
+        end
+      "#<#{self.class.name} #{@repo.name}:#{id}#{message}>"
+    end
+
     include Entity
     alias entity_id id
+  end
+
+  class Commits
+    include Typedocs::DSL
+    tdoc "[Commit...]->"
+    def initialize(commits)
+      @commits = Sorter.sort(commits)
+    end
+
+    def method_missing(name, *args)
+      @commits.public_send(name, *args)
+    end
+
+    class Sorter
+      include Typedocs::DSL
+      tdoc "[Commit...] -> [Commit...]"
+      def self.sort(array)
+        new(array).tsort
+      end
+      def initialize(commits)
+        @commits = commits
+        @commits_by_id = @commits.each_with_object({}){|c,h| h[c.id] = c }
+      end
+      include TSort
+      def tsort_each_node(&b)
+        @commits.each(&b)
+      end
+      def tsort_each_child(commit, &b)
+        commit.parents.each do|parent|
+          if @commits_by_id[parent.id]
+            yield parent
+          end
+        end
+      end
+    end
   end
 
   class ChangedFile

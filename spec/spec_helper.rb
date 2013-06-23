@@ -86,3 +86,8 @@ def new_git_repository
   SpecHelper::GitRepo.new(new_tmp_dir)
 end
 
+def itss(name, &block)
+  describe name do
+    it { subject.instance_eval(name).instance_eval(&block) }
+  end
+end
